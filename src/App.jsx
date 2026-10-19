@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { airportCoordinates } from './airportCoordinates'
 
 const destinations = [
   { city: 'Los Angeles', code: 'LAX', region: 'America', airline: 'Singapore Airlines' },
@@ -95,6 +96,41 @@ const destinations = [
 
 const sqDestinations = destinations.filter((destination) => destination.airline === 'Singapore Airlines')
 const initialShuffleSeed = Date.now()
+
+function distanceFromSingapore(code) {
+  const coordinates = airportCoordinates[code]
+  const singaporeCoordinates = airportCoordinates.SIN
+  if (!coordinates) return null
+  const toRadians = (degrees) => degrees * Math.PI / 180
+  const latitudeDifference = toRadians(coordinates[0] - singaporeCoordinates[0])
+  const longitudeDifference = toRadians(coordinates[1] - singaporeCoordinates[1])
+  const startLatitude = toRadians(singaporeCoordinates[0])
+  const endLatitude = toRadians(coordinates[0])
+  const haversine = Math.sin(latitudeDifference / 2) ** 2
+    + Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(longitudeDifference / 2) ** 2
+  return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+}
+
+function formatDuration(hours) {
+  const minutes = Math.round(hours * 12) * 5
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
+}
+
+const regionStats = [...new Set(sqDestinations.map((destination) => destination.region))].map((region) => {
+  const routes = sqDestinations
+    .filter((destination) => destination.region === region && destination.code !== 'SIN')
+    .map((destination) => ({ ...destination, distance: distanceFromSingapore(destination.code) }))
+    .filter((destination) => destination.distance !== null)
+    .sort((first, second) => first.distance - second.distance)
+  const averageDistance = routes.reduce((total, route) => total + route.distance, 0) / routes.length
+  return {
+    region,
+    minimum: routes[0],
+    maximum: routes.at(-1),
+    averageDistance,
+    averageDuration: averageDistance / 850 + 2 / 3,
+  }
+})
 
 function shuffle(items, seed) {
   const shuffled = [...items]
@@ -225,6 +261,19 @@ function App() {
         </div>
 
         <aside className="stats-panel"><div className="sidebar-label">Your rhythm</div><div className="stat-block"><strong>{streak}</strong><span>current streak</span></div><div className="stat-block"><strong>{best}</strong><span>best streak</span></div><div className="stat-divider" /><div className="small-stat"><span>Deck size</span><b>{deck.length}</b></div><div className="small-stat"><span>Mastered</span><b>{score.known}</b></div><div className="finish-mark">✦</div></aside>
+      </section>
+
+      <section className="route-stats">
+        <div className="route-stats-head">
+          <div><span className="eyebrow"><span>02</span> SQ ROUTES FROM SINGAPORE</span><h2>SQ regional flight range</h2></div>
+          <p>Singapore Airlines destinations only; Scoot and partner airlines are excluded. Distance uses great-circle routes from Changi. Time is estimated at 850 km/h plus 40 minutes.</p>
+        </div>
+        <div className="stats-table-wrap">
+          <table className="route-table">
+            <thead><tr><th>Region</th><th>Minimum route</th><th>Maximum route</th><th>Average distance</th><th>Average time</th></tr></thead>
+            <tbody>{regionStats.map((stats) => <tr key={stats.region}><td>{stats.region}</td><td><strong>{stats.minimum.code}</strong><span>{stats.minimum.city}</span><small>{Math.round(stats.minimum.distance).toLocaleString()} km · {formatDuration(stats.minimum.distance / 850 + 2 / 3)}</small></td><td><strong>{stats.maximum.code}</strong><span>{stats.maximum.city}</span><small>{Math.round(stats.maximum.distance).toLocaleString()} km · {formatDuration(stats.maximum.distance / 850 + 2 / 3)}</small></td><td>{Math.round(stats.averageDistance).toLocaleString()} km</td><td>{formatDuration(stats.averageDuration)}</td></tr>)}</tbody>
+          </table>
+        </div>
       </section>
 
       <footer className="footer"><span>DESTINATION MEMORY / 2026</span><span>Singapore Airlines destination data</span></footer>
