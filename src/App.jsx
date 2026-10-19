@@ -192,7 +192,7 @@ function App() {
               <div className="city-rule" />
               <div className="answer-area options-grid">{options.map((option) => <button key={option.city} type="button" className={selectedAnswer === option.city ? (option.city === card.city ? 'option correct' : 'option wrong') : answered && option.city === card.city ? 'option correct' : 'option'} onClick={() => answerCard(option)} disabled={answered}>{option.city}<span>{selectedAnswer === option.city ? (option.city === card.city ? '✓' : '×') : answered && option.city === card.city ? '✓' : ''}</span></button>)}</div>
             </div>
-            <div className="card-footer"><span>{card.region}</span><span className="airline-tag">{card.airline === 'Partner airline' ? 'Partner' : 'SQ direct'}</span></div>
+            <div className="card-footer"><span className="airline-tag">SQ direct</span></div>
           </article>
 
           <div className="actions"><button type="button" className="action known next-action" disabled={!answered} onClick={nextCard}>{answered ? 'Next card' : 'Choose an answer'} <span>→</span><kbd>SPACE</kbd></button></div>
