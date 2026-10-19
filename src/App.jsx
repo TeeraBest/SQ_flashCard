@@ -146,30 +146,38 @@ function shuffle(items, seed) {
 function App() {
   const [filter, setFilter] = useState('All destinations')
   const [shuffleSeed, setShuffleSeed] = useState(initialShuffleSeed)
-  const [cardIndex, setCardIndex] = useState(0)
+  const [questionQueue, setQuestionQueue] = useState(() => shuffle(sqDestinations, initialShuffleSeed).map((destination) => destination.code))
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [answered, setAnswered] = useState(false)
+  const [lastAnswerCorrect, setLastAnswerCorrect] = useState(false)
   const [score, setScore] = useState({ known: 0, review: 0 })
   const [best, setBest] = useState(() => Number(localStorage.getItem('sq-best-streak') || 0))
   const [streak, setStreak] = useState(0)
 
   const regions = ['All destinations', ...new Set(sqDestinations.map((destination) => destination.region))]
-  const deck = useMemo(() => shuffle(filter === 'All destinations'
+  const deck = useMemo(() => filter === 'All destinations'
     ? sqDestinations
-    : sqDestinations.filter((destination) => destination.region === filter), shuffleSeed), [filter, shuffleSeed])
-  const card = deck[cardIndex % deck.length]
+    : sqDestinations.filter((destination) => destination.region === filter), [filter])
+  const card = sqDestinations.find((destination) => destination.code === questionQueue[0])
+  const attempts = score.known + score.review
   const options = useMemo(() => {
-    const sameRegion = deck.filter((destination) => destination.code !== card.code && destination.region === card.region)
-    const otherRegions = deck.filter((destination) => destination.code !== card.code && destination.region !== card.region)
-    const distractors = shuffle([...sameRegion, ...otherRegions], shuffleSeed + cardIndex * 101).slice(0, 3)
-    return shuffle([card, ...distractors], shuffleSeed ^ ((cardIndex + 1) * 7919))
-  }, [card, cardIndex, deck, shuffleSeed])
-  const completed = score.known + score.review
-  const progress = Math.min(100, (completed / 10) * 100)
+    if (!card) return []
+    const alternatives = sqDestinations.filter((destination) => destination.code !== card.code)
+    const sameInitial = alternatives.filter((destination) => destination.code.startsWith(card.code[0]))
+    const sameRegion = alternatives.filter((destination) => !sameInitial.includes(destination) && destination.region === card.region)
+    const remaining = alternatives.filter((destination) => !sameInitial.includes(destination) && !sameRegion.includes(destination))
+    const distractors = [
+      ...shuffle(sameInitial, shuffleSeed + attempts * 101),
+      ...shuffle(sameRegion, shuffleSeed + attempts * 211),
+      ...shuffle(remaining, shuffleSeed + attempts * 307),
+    ].slice(0, 3)
+    return shuffle([card, ...distractors], shuffleSeed ^ ((attempts + 1) * 7919))
+  }, [attempts, card, shuffleSeed])
+  const progress = Math.min(100, (score.known / deck.length) * 100)
 
   function answerCard(option) {
     if (answered) return
-    const isCorrect = option.city === card.city
+    const isCorrect = option.code === card.code
     const result = isCorrect ? 'known' : 'review'
     const nextStreak = isCorrect ? streak + 1 : 0
     setScore((current) => ({ ...current, [result]: current[result] + 1 }))
@@ -178,14 +186,24 @@ function App() {
       setBest(nextStreak)
       localStorage.setItem('sq-best-streak', String(nextStreak))
     }
-    setSelectedAnswer(option.city)
+    setSelectedAnswer(option.code)
+    setLastAnswerCorrect(isCorrect)
     setAnswered(true)
   }
 
   function nextCard() {
+    const nextSeed = (shuffleSeed * 1664525 + 1013904223) >>> 0
+    setQuestionQueue((currentQueue) => {
+      const [currentCode, ...remainingQuestions] = currentQueue
+      if (lastAnswerCorrect) return remainingQuestions
+      const insertionIndex = remainingQuestions.length === 0 ? 0 : 1 + nextSeed % remainingQuestions.length
+      const nextQueue = [...remainingQuestions]
+      nextQueue.splice(insertionIndex, 0, currentCode)
+      return nextQueue
+    })
+    setShuffleSeed(nextSeed)
     setSelectedAnswer(null)
     setAnswered(false)
-    setCardIndex((index) => index + 1)
   }
 
   useEffect(() => {
@@ -202,18 +220,25 @@ function App() {
   })
 
   function changeFilter(nextFilter) {
+    const nextSeed = (shuffleSeed * 1664525 + 1013904223) >>> 0
+    const nextDeck = nextFilter === 'All destinations'
+      ? sqDestinations
+      : sqDestinations.filter((destination) => destination.region === nextFilter)
     setFilter(nextFilter)
-    setShuffleSeed((seed) => (seed * 1664525 + 1013904223) >>> 0)
-    setCardIndex(0)
+    setShuffleSeed(nextSeed)
+    setQuestionQueue(shuffle(nextDeck, nextSeed).map((destination) => destination.code))
+    setScore({ known: 0, review: 0 })
+    setStreak(0)
     setSelectedAnswer(null)
     setAnswered(false)
   }
 
   function resetSession() {
+    const nextSeed = (shuffleSeed * 1664525 + 1013904223) >>> 0
     setScore({ known: 0, review: 0 })
     setStreak(0)
-    setCardIndex(0)
-    setShuffleSeed((seed) => (seed * 1664525 + 1013904223) >>> 0)
+    setShuffleSeed(nextSeed)
+    setQuestionQueue(shuffle(deck, nextSeed).map((destination) => destination.code))
     setSelectedAnswer(null)
     setAnswered(false)
   }
@@ -242,21 +267,21 @@ function App() {
         </aside>
 
         <div className="game-column">
-          <div className="session-head"><div><span className="session-kicker">CURRENT SESSION</span><strong>{completed === 0 ? 'First pass' : `${completed} cards reviewed`}</strong></div><div className="score-line"><span className="known-dot" />{score.known} known <span className="review-dot" />{score.review} review</div></div>
+          <div className="session-head"><div><span className="session-kicker">CURRENT SESSION</span><strong>{score.known === 0 ? 'First pass' : `${score.known} of ${deck.length} mastered`}</strong></div><div className="score-line"><span className="known-dot" />{score.known} known <span className="review-dot" />{score.review} review</div></div>
           <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
 
-          <article className={answered ? 'flashcard answered' : 'flashcard'}>
-            <div className="card-top"><span>Destination recall</span><span>{String((cardIndex % 10) + 1).padStart(2, '0')} / 10</span></div>
+          {card ? <article className={answered ? 'flashcard answered' : 'flashcard'}>
+            <div className="card-top"><span>Destination recall</span><span>{String(score.known + 1).padStart(2, '0')} / {String(deck.length).padStart(2, '0')}</span></div>
             <div className="card-content">
               <span className="card-question">Which destination uses this airport code?</span>
               <h2>{card.code}</h2>
               <div className="city-rule" />
-              <div className="answer-area options-grid">{options.map((option) => <button key={option.city} type="button" className={selectedAnswer === option.city ? (option.city === card.city ? 'option correct' : 'option wrong') : answered && option.city === card.city ? 'option correct' : 'option'} onClick={() => answerCard(option)} disabled={answered}>{option.city}<span>{selectedAnswer === option.city ? (option.city === card.city ? '✓' : '×') : answered && option.city === card.city ? '✓' : ''}</span></button>)}</div>
+              <div className="answer-area options-grid">{options.map((option) => <button key={option.code} type="button" className={selectedAnswer === option.code ? (option.code === card.code ? 'option correct' : 'option wrong') : answered && option.code === card.code ? 'option correct' : 'option'} onClick={() => answerCard(option)} disabled={answered}>{option.city}<span>{selectedAnswer === option.code ? (option.code === card.code ? '✓' : '×') : answered && option.code === card.code ? '✓' : ''}</span></button>)}</div>
             </div>
             <div className="card-footer"><span className="airline-tag">SQ direct</span></div>
-          </article>
+          </article> : <article className="flashcard complete-card"><div className="card-content"><span className="card-question">Session complete</span><h2>{deck.length}/{deck.length}</h2><div className="city-rule" /><div className="answer-area"><strong>All destinations mastered</strong></div></div></article>}
 
-          <div className="actions"><button type="button" className="action known next-action" disabled={!answered} onClick={nextCard}>{answered ? 'Next card' : 'Choose an answer'} <span>→</span><kbd>SPACE</kbd></button></div>
+          <div className="actions"><button type="button" className="action known next-action" disabled={Boolean(card) && !answered} onClick={card ? nextCard : resetSession}>{card ? (answered ? 'Next card' : 'Choose an answer') : 'Study again'} <span>→</span><kbd>SPACE</kbd></button></div>
           <div className="keyboard-hint"><span>1–4</span> choose answer <span>SPACE</span> next card</div>
         </div>
 
