@@ -11,6 +11,12 @@ function createMealQuestions(meals) {
     const sameCategory = alternatives.filter((item) => item.category === meal.category)
     const otherCategories = alternatives.filter((item) => item.category !== meal.category)
     const sameInitial = alternatives.filter((item) => item.code.startsWith(meal.code[0]))
+    const detailQuestions = meal.studyDetails.map((detail, index) => ({
+      id: `${meal.code}-detail-${index + 1}`, category: meal.category,
+      label: meal.studyDetails.length > 1 ? `Meal detail ${index + 1} of ${meal.studyDetails.length}` : 'Meal detail',
+      prompt: 'Which special meal matches every detail shown?', clue: detail, clueSize: 'small', answer: meal.name,
+      choiceGroups: [sameCategory.map((item) => item.name), otherCategories.map((item) => item.name)],
+    }))
     return [
       {
         id: `${meal.code}-name`, category: meal.category, label: 'Code to full name',
@@ -22,11 +28,7 @@ function createMealQuestions(meals) {
         prompt: 'What is the short code for this special meal?', clue: meal.name, clueSize: 'medium', answer: meal.code,
         choiceGroups: [sameCategory.map((item) => item.code), sameInitial.map((item) => item.code), otherCategories.map((item) => item.code)],
       },
-      {
-        id: `${meal.code}-detail`, category: meal.category, label: 'Meal detail',
-        prompt: 'Which special meal matches this description?', clue: meal.description, clueSize: 'small', answer: meal.name,
-        choiceGroups: [sameCategory.map((item) => item.name), otherCategories.map((item) => item.name)],
-      },
+      ...detailQuestions,
     ]
   })
 }
@@ -81,7 +83,7 @@ export function SpecialMealsPage() {
       </section>
 
       <section className="meal-index">
-        <div className="route-stats-head"><div><span className="eyebrow"><span>03</span> STUDY INDEX</span><h2>24 special meals</h2></div><p>Each meal appears in three directions: code to name, name to code, and description to meal. Booking and allergy rules form a separate question set.</p></div>
+        <div className="route-stats-head"><div><span className="eyebrow"><span>03</span> STUDY INDEX</span><h2>24 special meals</h2></div><p>Every meal tests code, full name, and complete restrictions. Complex meals split availability, preparation, and allergy caveats into focused questions so no exam detail is lost.</p></div>
         <div className="meal-groups">{categories.slice(1, -1).map((category) => <section key={category}><h3>{category}</h3><div>{specialMeals.filter((meal) => meal.category === category).map((meal) => <span key={meal.code}><b>{meal.code}</b>{meal.name}</span>)}</div></section>)}</div>
       </section>
     </>
