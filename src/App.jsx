@@ -94,9 +94,22 @@ const destinations = [
 ]
 
 const sqDestinations = destinations.filter((destination) => destination.airline === 'Singapore Airlines')
+const initialShuffleSeed = Date.now()
+
+function shuffle(items, seed) {
+  const shuffled = [...items]
+  let random = seed >>> 0
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    random = (random * 1664525 + 1013904223) >>> 0
+    const target = random % (index + 1)
+    ;[shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]]
+  }
+  return shuffled
+}
 
 function App() {
   const [filter, setFilter] = useState('All destinations')
+  const [shuffleSeed, setShuffleSeed] = useState(initialShuffleSeed)
   const [cardIndex, setCardIndex] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [answered, setAnswered] = useState(false)
@@ -105,16 +118,16 @@ function App() {
   const [streak, setStreak] = useState(0)
 
   const regions = ['All destinations', ...new Set(sqDestinations.map((destination) => destination.region))]
-  const deck = useMemo(() => filter === 'All destinations'
+  const deck = useMemo(() => shuffle(filter === 'All destinations'
     ? sqDestinations
-    : sqDestinations.filter((destination) => destination.region === filter), [filter])
+    : sqDestinations.filter((destination) => destination.region === filter), shuffleSeed), [filter, shuffleSeed])
   const card = deck[cardIndex % deck.length]
   const options = useMemo(() => {
-    const distractors = deck.filter((destination) => destination.city !== card.city)
-    const start = cardIndex % distractors.length
-    return [card, ...Array.from({ length: 3 }, (_, index) => distractors[(start + index * 7) % distractors.length])]
-      .sort((first, second) => first.city.localeCompare(second.city))
-  }, [card, cardIndex, deck])
+    const sameRegion = deck.filter((destination) => destination.code !== card.code && destination.region === card.region)
+    const otherRegions = deck.filter((destination) => destination.code !== card.code && destination.region !== card.region)
+    const distractors = shuffle([...sameRegion, ...otherRegions], shuffleSeed + cardIndex * 101).slice(0, 3)
+    return shuffle([card, ...distractors], shuffleSeed ^ ((cardIndex + 1) * 7919))
+  }, [card, cardIndex, deck, shuffleSeed])
   const completed = score.known + score.review
   const progress = Math.min(100, (completed / 10) * 100)
 
@@ -154,6 +167,7 @@ function App() {
 
   function changeFilter(nextFilter) {
     setFilter(nextFilter)
+    setShuffleSeed((seed) => (seed * 1664525 + 1013904223) >>> 0)
     setCardIndex(0)
     setSelectedAnswer(null)
     setAnswered(false)
@@ -163,6 +177,7 @@ function App() {
     setScore({ known: 0, review: 0 })
     setStreak(0)
     setCardIndex(0)
+    setShuffleSeed((seed) => (seed * 1664525 + 1013904223) >>> 0)
     setSelectedAnswer(null)
     setAnswered(false)
   }
